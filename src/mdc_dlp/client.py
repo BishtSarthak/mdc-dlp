@@ -147,7 +147,7 @@ class DataCollective:
         # set up API URL
         self.api_url = (
             os.getenv("MDC_API_URL")
-            or "https://datacollective.mozillafoundation.org/api"
+            or "https://mdc_dlp.mozillafoundation.org/api"
         )
         if not self.api_url.endswith("/"):
             self.api_url += "/"  # add trailing slash if it isn't already included

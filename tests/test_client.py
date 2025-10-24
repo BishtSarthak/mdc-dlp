@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from datacollective import DataCollective
+from mdc_dlp import DataCollective
 
 
 class TestDataCollective:
@@ -15,7 +15,7 @@ class TestDataCollective:
         """Test initialization with API key passed as parameter."""
         client = DataCollective(api_key="test-api-key-123")
         assert client.api_key == "test-api-key-123"
-        assert client.api_url == "https://datacollective.mozillafoundation.org/api/"
+        assert client.api_url == "https://mdc_dlp.mozillafoundation.org/api/"
 
     def test_init_with_env_variable(self):
         """Test initialization with API key from environment variable."""
@@ -27,7 +27,7 @@ class TestDataCollective:
         """Test that missing API key raises ValueError."""
         with patch.dict(os.environ, {}, clear=True):
             with patch(
-                "datacollective.client.load_dotenv"
+                "mdc_dlp.client.load_dotenv"
             ):  # Mock to prevent loading from file
                 with pytest.raises(ValueError) as exc_info:
                     DataCollective()
@@ -48,7 +48,7 @@ class TestDataCollective:
             # Ensure MDC_API_URL is not set
             os.environ.pop("MDC_API_URL", None)
             client = DataCollective()
-            assert client.api_url == "https://datacollective.mozillafoundation.org/api/"
+            assert client.api_url == "https://mdc_dlp.mozillafoundation.org/api/"
 
     def test_environment_parameter_loads_correct_env_file(self):
         """Test that different environment parameter loads correct .env file."""
@@ -92,7 +92,7 @@ class TestDataCollective:
             client = DataCollective(api_key="param-key")
             assert client.api_key == "param-key"
 
-    @patch("datacollective.client.requests.post")
+    @patch("mdc_dlp.client.requests.post")
     def test_get_dataset_handles_http_error(self, mock_post):
         """Test that get_dataset handles HTTP errors properly."""
         # Mock a 403 Forbidden response
@@ -114,7 +114,7 @@ class TestDataCollective:
 class TestDataCollectiveWithMocking:
     """Tests using mocking for isolation."""
 
-    @patch("datacollective.client.load_dotenv")
+    @patch("mdc_dlp.client.load_dotenv")
     def test_load_dotenv_called_for_development(self, mock_load_dotenv):
         """Test that load_dotenv is called with correct path for development."""
         with patch.dict(os.environ, {"MDC_API_KEY": "test-key"}):
@@ -122,7 +122,7 @@ class TestDataCollectiveWithMocking:
                 DataCollective(environment="development")
                 mock_load_dotenv.assert_called_once_with(dotenv_path=".env.development")
 
-    @patch("datacollective.client.load_dotenv")
+    @patch("mdc_dlp.client.load_dotenv")
     def test_load_dotenv_fallback_when_env_file_missing(self, mock_load_dotenv):
         """Test that load_dotenv falls back to default when env file doesn't exist."""
         with patch.dict(os.environ, {"MDC_API_KEY": "test-key"}):
@@ -153,4 +153,4 @@ class TestDataCollectiveWithFixtures:
 
     def test_client_fixture_has_default_url(self, client):
         """Test that fixture-provided client has default URL."""
-        assert client.api_url == "https://datacollective.mozillafoundation.org/api/"
+        assert client.api_url == "https://mdc_dlp.mozillafoundation.org/api/"

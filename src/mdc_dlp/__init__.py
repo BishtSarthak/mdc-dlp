@@ -2,7 +2,7 @@
 Mozilla Data Collective Python Client Library
 
 Usage:
-    from datacollective import DataCollective
+    from mdc_dlp import DataCollective
     client = DataCollective()
 """
 
