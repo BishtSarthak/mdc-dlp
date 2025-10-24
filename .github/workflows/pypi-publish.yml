@@ -43,9 +43,11 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI (pre-release)
-    if: contains(github.event.release.tag_name, 'a') || contains(github.event.release.tag_name, 'b')
+    # use github.ref_name instead of release.tag_name
+    if: contains(github.ref_name, 'a') || contains(github.ref_name, 'b')
     needs: [build]
     runs-on: ubuntu-latest
+    environment: publish-testpypi   # must match your TestPyPI “Pending Publisher”
     permissions:
       id-token: write
     steps:
@@ -63,10 +65,11 @@ jobs:
   publish-pypi:
     name: Publish to PyPI (stable)
     if: |
-      !contains(github.event.release.tag_name, 'a') &&
-      !contains(github.event.release.tag_name, 'b')
+      !contains(github.ref_name, 'a') &&
+      !contains(github.ref_name, 'b')
     needs: [build]
     runs-on: ubuntu-latest
+    environment: pypi   # optional; for later Trusted Publisher registration
     permissions:
       id-token: write
     steps:
