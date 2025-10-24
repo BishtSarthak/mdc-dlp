@@ -67,7 +67,7 @@ def show_version() -> int:
                 break
 
     # Read version from __init__.py
-    init_path = Path("src/datacollective/__init__.py")
+    init_path = Path("src/mdc_dlp/__init__.py")
     if init_path.exists():
         content = init_path.read_text()
         for line in content.split("\n"):
@@ -75,6 +75,8 @@ def show_version() -> int:
                 version = line.split('"')[1]
                 print(f"  __init__.py: {version}")
                 break
+    else:
+        print("  __init__.py: (src/mdc_dlp/__init__.py not found)")
 
     return 0
 

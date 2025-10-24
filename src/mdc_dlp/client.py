@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import sys
 import tarfile
@@ -7,6 +8,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+try:
+    # urllib3 >= 2
+    from urllib3.util.retry import Retry
+except Exception:  # pragma: no cover - fallback if urllib3 API changes
+    Retry = None  # type: ignore
 from dotenv import load_dotenv
 
 from .dataset import Dataset
@@ -147,7 +154,7 @@ class DataCollective:
         # set up API URL
         self.api_url = (
             os.getenv("MDC_API_URL")
-            or "https://mdc_dlp.mozillafoundation.org/api"
+            or "https://datacollective.mozillafoundation.org/api"
         )
         if not self.api_url.endswith("/"):
             self.api_url += "/"  # add trailing slash if it isn't already included
@@ -166,6 +173,23 @@ class DataCollective:
         )
         # Expand user path (handle ~)
         self.download_path = os.path.expanduser(download_path_env)  # type: ignore
+
+        # HTTP session with retries/timeouts
+        self._session = requests.Session()
+        if Retry is not None:
+            retries = Retry(
+                total=5,
+                connect=5,
+                read=5,
+                backoff_factor=0.5,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset(["HEAD", "GET", "OPTIONS", "POST"]),
+            )
+            adapter = HTTPAdapter(max_retries=retries)
+            self._session.mount("https://", adapter)
+            self._session.mount("http://", adapter)
+        # sane defaults; can be parameterized later
+        self._timeout = (10, 60)  # (connect timeout, read timeout) seconds
 
     def _ensure_download_directory(self, download_path: str) -> None:
         """
@@ -318,3 +342,86 @@ class DataCollective:
             tar.extractall(path=extract_path)
         print(f"Extracted {filepath} to {extract_path}")
         return extract_path
+    
+    def _strip_api_suffix(base: str) -> str:
+        # remove a single trailing "/api" or "/api/" (case-sensitive)
+        return re.sub(r'/api/?$', '', base.rstrip('/'))
+
+    def list_datasets(
+        self,
+        limit: int = 100,
+        show: bool = True,
+        force_html: bool = False,
+    ) -> list[dict[str, str]]:
+        """
+        Attempt to list datasets.
+        Strategy:
+        1) (optional) Try an API index (undocumented; may 404) unless force_html=True
+        2) Fallback: scrape the public /datasets catalog (no auth required)
+
+        Returns: list of {"id": ..., "title": ...}
+        """
+        out: list[dict[str, str]] = []
+
+        # -------- 1) API probe (best-effort) --------
+        if not force_html:
+            try:
+                url_api = self.api_url.rstrip('/') + "/datasets"
+                headers = {"Authorization": "Bearer " + self.api_key} if self.api_key else {}
+                r = self._session.get(url_api, headers=headers, timeout=self._timeout, params={"limit": limit})
+                if r.status_code == 200:
+                    data = r.json()
+                    if isinstance(data, list):
+                        for d in data[:limit]:
+                            out.append({"id": str(d.get("id")), "title": str(d.get("title", ""))})
+                        if show:
+                            print(f"📚 Found {len(out)} datasets (API).")
+                        return out
+                # Any non-200: silently ignore and fall back to HTML
+            except requests.exceptions.RequestException:
+                pass  # fall back to HTML
+
+        # -------- 2) HTML fallback (public) --------
+        catalog_base = DataCollective._strip_api_suffix(self.api_url)
+        catalog_url = catalog_base.rstrip('/') + "/datasets"
+
+        try:
+            page = self._session.get(catalog_url, timeout=self._timeout)
+            page.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Failed to fetch datasets (HTML): {e}")
+            return []
+
+        html = page.text
+
+        # Grab dataset ids from links like href="/datasets/<id>"
+        ids = re.findall(r'href="/datasets/([a-z0-9\-]+)"', html)
+        # Dedup while preserving order
+        seen = set()
+        ids = [i for i in ids if not (i in seen or seen.add(i))]
+
+        # Try to get a title from each dataset page (og:title or <title>)
+        def _extract_title(doc: str) -> str:
+            m = re.search(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']+)["\']', doc, re.I)
+            if m:
+                return m.group(1).strip()
+            m = re.search(r'<title>([^<]+)</title>', doc, re.I)
+            return m.group(1).strip() if m else ""
+
+        for dsid in ids[:limit]:
+            detail_url = f"{catalog_base.rstrip('/')}/datasets/{dsid}"
+            title = ""
+            try:
+                dresp = self._session.get(detail_url, timeout=self._timeout)
+                if dresp.status_code == 200:
+                    title = _extract_title(dresp.text)
+            except requests.exceptions.RequestException:
+                pass
+            out.append({"id": dsid, "title": title})
+
+        if show:
+            print(f"📚 Found {len(out)} datasets (HTML).")
+            for d in out:
+                print(f"  - {d['id']} :: {d['title'] or '(no title)'}")
+
+        return out
