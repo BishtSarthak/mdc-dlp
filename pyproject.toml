@@ -6,6 +6,7 @@ build-backend = "uv_build"
 name = "mdc-dlp"
 version = "0.0.1a0"
 dependencies = [
+    "beautifulsoup4>=4.14.2",
     "pandas>=2.0.0",
     "python-dotenv>=1.0.0",
     "requests>=2.0.0",
